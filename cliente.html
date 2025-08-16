@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Página de Agendamento</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 20px; 
+      max-width: 500px; 
+      background: #e8f8f5; /* fundo verde claro */
+    }
+    label { display: block; margin-top: 10px; }
+    select, input { 
+      width: 100%; 
+      padding: 10px; 
+      margin-top: 5px; 
+      font-size: 16px; 
+      border: 1px solid #a3e4d7;
+      border-radius: 8px;
+    }
+    button { 
+      margin-top: 15px; 
+      padding: 12px; 
+      cursor: pointer; 
+      width: 100%; 
+      font-size: 16px; 
+      border: none;
+      border-radius: 10px;
+      background: #16a085; 
+      color: #fff;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #138d75;
+    }
+    #msg { margin-top: 10px; font-weight: 600; }
+
+    /* Cabeçalho com imagem e boas-vindas */
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header img {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 4px solid #a3e4d7;
+      margin-bottom: 10px;
+    }
+    .header h2 {
+      margin: 5px 0;
+      color: #16a085;
+    }
+    .header p {
+      font-size: 14px;
+      color: #444;
+    }
+
+    @media (max-width: 600px) {
+      body { margin: 10px; }
+      h2 { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Cabeçalho personalizado -->
+  <div class="header">
+    <img src="assets/perfil.jpg" alt="Eduarda Costa - Nail">
+    <h2>Eduarda Costa - Nail</h2>
+    <p>Olá, Seja Bem vinda à minha página de agendamentos.<br>
+       Escolha o serviço e marque um horário! 💅💗</p>
+  </div>
+
+  <h2>Agendar Atendimento</h2>
+
+  <form id="appointmentForm">
+    <label>Nome:
+      <input type="text" id="name" required>
+    </label>
+
+    <label>WhatsApp:
+      <input type="text" id="whatsapp" placeholder="(99) 99999-9999" required>
+    </label>
+
+    <label>Serviço:
+      <select id="service" required>
+        <option value="">Selecione</option>
+      </select>
+    </label>
+
+    <label>Valor:
+      <input type="text" id="price" readonly>
+    </label>
+
+    <label>Data:
+      <input type="date" id="date" required>
+    </label>
+
+    <label>Horário:
+      <select id="time" required>
+        <option value="">Selecione a data</option>
+      </select>
+    </label>
+
+    <button type="submit">Agendar</button>
+  </form>
+
+  <p id="msg"></p>
+
+  <script>
+    const services = {
+      "Alongamento em gel": "129,99",
+      "Manutenção de alongamento": "79,99",
+      "Blindagem": "49,99",
+      "Banho de gel": "59,99",
+      "Pé esmaltação em gel": "49,99",
+      "Combo Pé + mão convencionais": "39,99",
+      "Pé convencional": "19,99",
+      "Mão Convencional": "19,99"
+    };
+
+    function getAvailableTimes(weekday) {
+      switch (weekday) {
+        case 0: case 1: return []; // Domingo e segunda
+        case 2: case 3: case 4: case 5: return ["14:00 - 16:00","16:00 - 18:00"];
+        case 6: return ["08:00 - 10:00","10:00 - 12:00","14:00 - 16:00","16:00 - 18:00"];
+      }
+    }
+
+    const serviceSelect = document.getElementById("service");
+    const priceInput   = document.getElementById("price");
+    const timeSelect   = document.getElementById("time");
+    const dateInput    = document.getElementById("date");
+    const msgEl        = document.getElementById("msg");
+
+    // Carregar serviços
+    Object.keys(services).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      serviceSelect.appendChild(opt);
+    });
+
+    serviceSelect.addEventListener("change", () => {
+      priceInput.value = serviceSelect.value ? "R$ " + services[serviceSelect.value] : "";
+    });
+
+    // Data mínima hoje
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    dateInput.min = today.toISOString().slice(0,10);
+
+    function renderTimesForSelectedDate() {
+      timeSelect.innerHTML = "";
+
+      if (!dateInput.value) {
+        timeSelect.innerHTML = '<option value="">Selecione a data</option>';
+        return;
+      }
+
+      const d = new Date(dateInput.value + "T00:00:00");
+      const weekday = d.getDay();
+      const baseTimes = getAvailableTimes(weekday);
+
+      if (baseTimes.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Indisponível (folga)";
+        opt.disabled = true;
+        timeSelect.appendChild(opt);
+        return;
+      }
+
+      const appointments = JSON.parse(localStorage.getItem("appointments")) || [];
+      const occupied = new Set(
+        appointments.filter(a => a.date === dateInput.value && a.status !== "Cancelado").map(a => a.time)
+      );
+
+      const freeTimes = baseTimes.filter(t => !occupied.has(t));
+
+      if (freeTimes.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Todos os horários ocupados";
+        opt.disabled = true;
+        timeSelect.appendChild(opt);
+      } else {
+        timeSelect.innerHTML = '<option value="">Selecione</option>';
+        freeTimes.forEach(t => {
+          const opt = document.createElement("option");
+          opt.value = t;
+          opt.textContent = t;
+          timeSelect.appendChild(opt);
+        });
+      }
+    }
+
+    dateInput.addEventListener("change", renderTimesForSelectedDate);
+
+    document.getElementById("appointmentForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      msgEl.textContent = "";
+
+      const name  = document.getElementById("name").value.trim();
+      const whatsapp = document.getElementById("whatsapp").value.trim();
+      const srv   = serviceSelect.value;
+      const price = services[srv];
+      const date  = dateInput.value;
+      const time  = timeSelect.value;
+
+      if (!name || !srv || !price || !date || !time || !whatsapp) {
+        msgEl.textContent = "⚠️ Preencha todos os campos.";
+        return;
+      }
+
+      const appointments = JSON.parse(localStorage.getItem("appointments")) || [];
+      const conflict = appointments.some(a => a.date === date && a.time === time && a.status !== "Cancelado");
+      if (conflict) {
+        msgEl.textContent = "⚠️ Este horário acabou de ser reservado. Escolha outro.";
+        renderTimesForSelectedDate();
+        return;
+      }
+
+      appointments.push({ name, whatsapp, service: srv, price, date, time, status: "Agendado", createdAt: new Date().toISOString() });
+      localStorage.setItem("appointments", JSON.stringify(appointments));
+
+      msgEl.textContent = "✅ Agendamento realizado com sucesso!";
+      e.target.reset();
+      priceInput.value = "";
+      renderTimesForSelectedDate();
+    });
+  </script>
+</body>
+</html>

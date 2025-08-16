@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Painel Profissional</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 20px; 
+      background: #e6f2f0; /* fundo verde claro suave */
+    }
+    table { 
+      border-collapse: collapse; 
+      width: 100%; 
+      margin-top: 20px; 
+      font-size: 14px; 
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    th, td { 
+      border: 1px solid #b2d8d2; 
+      padding: 8px; 
+      text-align: center; 
+    }
+    th { 
+      background: #a3e4d7; 
+      color: #333;
+    }
+    button { 
+      cursor: pointer; 
+      padding: 5px; 
+      margin: 2px; 
+      border: none;
+      border-radius: 6px;
+      background: #5d6ef0;
+      color: white;
+      font-weight: bold;
+    }
+    button:hover { background: #4b5cd1; }
+    .table-container { overflow-x: auto; }
+    @media (max-width: 600px) {
+      h2, h3 { font-size: 18px; }
+      table { font-size: 12px; }
+      button { font-size: 12px; padding: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <h2>Painel da Profissional</h2>
+
+  <h3>Agendamentos</h3>
+  <button onclick="generatePDF()">🖨️ Imprimir PDF do Dia</button>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>WhatsApp</th>
+          <th>Serviço</th>
+          <th>Valor</th>
+          <th>Data</th>
+          <th>Horário</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="appointmentsList"></tbody>
+    </table>
+  </div>
+
+  <h3>Resumo Financeiro</h3>
+  <p id="financeSummary"></p>
+
+  <!-- jsPDF e autoTable CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <script>
+    function formatDate(dateStr) {
+      const [year, month, day] = dateStr.split("-");
+      return `${day}-${month}-${year}`;
+    }
+
+    function loadAppointments() {
+      let appointments = JSON.parse(localStorage.getItem("appointments")) || [];
+
+      // Ordenar pela data mais próxima
+      appointments.sort((a, b) => {
+        if (a.date === b.date) return a.time.localeCompare(b.time);
+        return new Date(a.date) - new Date(b.date);
+      });
+
+      const tbody = document.getElementById("appointmentsList");
+      tbody.innerHTML = "";
+
+      let total = 0;
+
+      appointments.forEach((a, i) => {
+        const tr = document.createElement("tr");
+        // Cor de fundo conforme status
+        tr.style.background = (a.status === "Concluído") ? "#d4f7d4" : "#f7d4d4"; // verde ou vermelho suave
+        tr.innerHTML = `
+          <td>${a.name}</td>
+          <td>${a.whatsapp || "-"}</td>
+          <td>${a.service}</td>
+          <td>R$ ${a.price}</td>
+          <td>${formatDate(a.date)}</td>
+          <td>${a.time}</td>
+          <td>${a.status}</td>
+          <td>
+            <button onclick="markDone(${i})">Concluir</button>
+            <button onclick="deleteAppointment(${i})">Excluir</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        if (a.status === "Concluído") total += parseFloat(a.price.replace(",", "."));
+      });
+
+      document.getElementById("financeSummary").textContent =
+        `💰 Total concluído: R$ ${total.toFixed(2).replace(".", ",")}`;
+    }
+
+    function markDone(i) {
+      const appointments = JSON.parse(localStorage.getItem("appointments"));
+      appointments[i].status = "Concluído";
+      localStorage.setItem("appointments", JSON.stringify(appointments));
+      loadAppointments();
+    }
+
+    function deleteAppointment(i) {
+      const appointments = JSON.parse(localStorage.getItem("appointments"));
+      appointments.splice(i, 1);
+      localStorage.setItem("appointments", JSON.stringify(appointments));
+      loadAppointments();
+    }
+
+    // Função para gerar PDF do dia estilizado com cores
+    function generatePDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      const today = new Date().toISOString().slice(0,10);
+      const appointments = JSON.parse(localStorage.getItem("appointments")) || [];
+      const todayAppointments = appointments.filter(a => a.date === today);
+
+      doc.setFontSize(16);
+      doc.text("Agendamentos do Dia", 14, 20);
+
+      if (todayAppointments.length === 0) {
+        doc.setFontSize(12);
+        doc.text("Nenhum agendamento para hoje.", 14, 30);
+      } else {
+        const tableColumn = ["#", "Cliente", "WhatsApp", "Serviço", "Valor", "Horário", "Status"];
+        const tableRows = [];
+
+        todayAppointments.forEach((a, i) => {
+          tableRows.push([
+            i + 1,
+            a.name,
+            a.whatsapp || "-",
+            a.service,
+            `R$ ${a.price}`,
+            a.time,
+            a.status
+          ]);
+        });
+
+        doc.autoTable({
+          startY: 30,
+          head: [tableColumn],
+          body: tableRows,
+          theme: 'grid',
+          headStyles: { fillColor: [163, 228, 215], textColor: 50, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [245, 245, 245] },
+          didParseCell: function(data) {
+            if (data.column.index === 6) { // Status
+              if (data.cell.raw === "Concluído") data.cell.styles.fillColor = [212, 247, 212]; // verde suave
+              else data.cell.styles.fillColor = [247, 212, 212]; // vermelho suave
+            }
+          },
+          styles: { fontSize: 11 }
+        });
+      }
+
+      doc.save(`Agendamentos_${formatDate(today)}.pdf`);
+    }
+
+    loadAppointments();
+  </script>
+</body>
+</html>
